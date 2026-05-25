@@ -8,14 +8,16 @@ fi
 
 # Hàm hiển thị hướng dẫn sử dụng
 usage() {
-  echo "Usage: $0 [--nginx] [--apache] [--ssl] [--laravel] -name <config_name> -domain <domain_name> [-root <document_root>]"
+  echo "Usage: $0 [--nginx] [--apache] [--ssl] [--laravel] [--octane] -name <config_name> -domain <domain_name> [-root <document_root>] [-port <octane_port>]"
   echo "  --nginx           : Tạo cấu hình cho Nginx (Mặc định)"
   echo "  --apache          : Chỉ tạo cấu hình cho Apache2 (Cổng 8080)"
   echo "  --ssl             : Sử dụng SSL với certbot"
   echo "  --laravel         : Kiểm tra document root và tự động thêm /public nếu chưa có"
+  echo "  --octane          : Cấu hình Laravel Octane (Swoole) - Nginx reverse proxy sang Octane server"
   echo "  -name hoặc -n    : Tên file cấu hình (ví dụ: helloworld hay hello-world)"
   echo "  -domain hoặc -d  : Tên miền (có thể nhận nhiều -d làm server alias)"
   echo "  -root hoặc -r    : Đường dẫn root document (mặc định: /var/www/html/<config_name>)"
+  echo "  -port hoặc -p    : Cổng Octane server (mặc định: 8000)"
   exit 1
 }
 
@@ -25,6 +27,8 @@ create_nginx=false
 create_apache=false
 use_ssl=false
 laravel=false
+octane=false
+octane_port=8000
 domains=()
 
 # Đọc các tham số đầu vào
@@ -34,13 +38,14 @@ while [[ "$#" -gt 0 ]]; do
     --apache) create_apache=true ;;
     --ssl) use_ssl=true ;;
     --laravel) laravel=true ;;
+    --octane) octane=true; laravel=true ;;
     -name|-n) name="$2"; shift ;;
     -domain|-d) domains+=("$2"); shift ;;
     -root|-r) root="$2"; shift ;;
+    -port|-p) octane_port="$2"; shift ;;
     *) echo "Unknown parameter passed: $1"; usage ;;
   esac
   shift
-  # Di chuyển sang tham số tiếp theo
 done
 
 # Nếu không chỉ định rõ, mặc định tạo cấu hình Nginx thuần (LEMP)
@@ -85,6 +90,15 @@ done
 if [ "$create_nginx" = true ]; then
   nginx_conf="/etc/nginx/sites-available/$name"
   {
+    # Nếu dùng Octane, tạo upstream block trỏ vào Octane server
+    if [ "$octane" = true ]; then
+      echo "upstream octane_${name} {"
+      echo "    server 127.0.0.1:${octane_port};"
+      echo "    keepalive 32;"
+      echo "}"
+      echo ""
+    fi
+
     echo "server {"
     echo "    listen [::]:80;"
     echo "    listen 80;"
@@ -97,62 +111,92 @@ if [ "$create_nginx" = true ]; then
     echo ""
     echo "    server_name $domain_list;"
     echo ""
-    echo "    location ~* ^/(static/).+\.(?:css|cur|js|jpe?g|gif|htc|ico|png|html|xml|otf|ttf|eot|woff|woff2|svg)\$ {"
-    echo "        try_files \$uri \$uri/ /index.php;"
-    echo "        client_max_body_size 100M;"
-    echo "        access_log off;"
-    echo "        expires 30d;"
-    echo "        add_header Cache-Control public;"
-    echo "        tcp_nodelay off;"
-    echo "        open_file_cache max=3000 inactive=120s;"
-    echo "        open_file_cache_valid 45s;"
-    echo "        open_file_cache_min_uses 2;"
-    echo "        open_file_cache_errors off;"
-    echo "    }"
-    echo ""
-    
-    # Cấu hình route chính
-    if [ "$create_apache" = true ]; then
-      # Nếu cấu hình lai chạy với Apache, chuyển tiếp request tĩnh/động không xác định sang Apache cổng 8080
+
+    if [ "$octane" = true ]; then
+      # === Cấu hình Octane: Nginx làm Reverse Proxy sang Swoole/Octane server ===
+      # File tĩnh được Nginx phục vụ trực tiếp, không đi qua Octane
+      echo "    location ~* \.(?:css|js|jpe?g|png|gif|ico|svg|woff|woff2|ttf|eot|otf|webp|avif|mp4|webm)\$ {"
+      echo "        expires 30d;"
+      echo "        access_log off;"
+      echo "        add_header Cache-Control \"public, immutable\";"
+      echo "        try_files \$uri =404;"
+      echo "    }"
+      echo ""
+      # Tất cả request động đều đi qua Octane server
       echo "    location / {"
-      echo "        fastcgi_read_timeout 3000;"
-      echo "        proxy_read_timeout 3000;"
-      echo "        proxy_connect_timeout 3000;"
-      echo "        proxy_send_timeout 3000;"
-      echo "        send_timeout 3000;"
-      echo "        proxy_set_header X-Real-IP  \$remote_addr;"
-      echo "        proxy_set_header X-Forwarded-For \$remote_addr;"
+      echo "        proxy_http_version 1.1;"
       echo "        proxy_set_header Host \$host;"
+      echo "        proxy_set_header X-Real-IP \$remote_addr;"
+      echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
       echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
-      echo "        proxy_pass http://127.0.0.1:8080;"
+      echo "        proxy_set_header Upgrade \$http_upgrade;"
+      echo "        proxy_set_header Connection \"upgrade\";"
+      echo "        proxy_read_timeout 3000;"
+      echo "        proxy_send_timeout 3000;"
       echo "        client_max_body_size 100M;"
+      echo "        proxy_buffering off;"
+      echo "        proxy_pass http://octane_${name};"
       echo "    }"
     else
-      # Nếu là Nginx thuần (LEMP), xử lý rewrite URL trực tiếp tại đây (Laravel/WordPress)
-      echo "    location / {"
-      echo "        try_files \$uri \$uri/ /index.php?\$query_string;"
+      # === Cấu hình PHP-FPM truyền thống ===
+      echo "    location ~* ^/(static/).+\.(?:css|cur|js|jpe?g|gif|htc|ico|png|html|xml|otf|ttf|eot|woff|woff2|svg)\$ {"
+      echo "        try_files \$uri \$uri/ /index.php;"
       echo "        client_max_body_size 100M;"
+      echo "        access_log off;"
+      echo "        expires 30d;"
+      echo "        add_header Cache-Control public;"
+      echo "        tcp_nodelay off;"
+      echo "        open_file_cache max=3000 inactive=120s;"
+      echo "        open_file_cache_valid 45s;"
+      echo "        open_file_cache_min_uses 2;"
+      echo "        open_file_cache_errors off;"
+      echo "    }"
+      echo ""
+
+      # Cấu hình route chính
+      if [ "$create_apache" = true ]; then
+        echo "    location / {"
+        echo "        fastcgi_read_timeout 3000;"
+        echo "        proxy_read_timeout 3000;"
+        echo "        proxy_connect_timeout 3000;"
+        echo "        proxy_send_timeout 3000;"
+        echo "        send_timeout 3000;"
+        echo "        proxy_set_header X-Real-IP  \$remote_addr;"
+        echo "        proxy_set_header X-Forwarded-For \$remote_addr;"
+        echo "        proxy_set_header Host \$host;"
+        echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
+        echo "        proxy_pass http://127.0.0.1:8080;"
+        echo "        client_max_body_size 100M;"
+        echo "    }"
+      else
+        echo "    location / {"
+        echo "        try_files \$uri \$uri/ /index.php?\$query_string;"
+        echo "        client_max_body_size 100M;"
+        echo "    }"
+      fi
+      echo ""
+      echo "    location ~ \.php\$ {"
+      echo "        fastcgi_read_timeout 3000;"
+      echo "        fastcgi_pass unix:/run/php/php${php_version}-fpm.sock;"
+      echo "        include snippets/fastcgi-php.conf;"
+      echo "        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;"
+      echo "        include fastcgi_params;"
+      echo "        fastcgi_buffer_size 128k;"
+      echo "        fastcgi_buffers 4 256k;"
+      echo "        fastcgi_busy_buffers_size 256k;"
+      echo "    }"
+      echo ""
+      # Phục vụ file tĩnh trực tiếp bởi Nginx
+      echo "    location ~* \.(?:css|js|jpe?g|png|gif|ico|svg|woff|woff2|ttf|eot|otf|webp|avif|mp4|webm)\$ {"
+      echo "        expires 30d;"
+      echo "        access_log off;"
+      echo "        add_header Cache-Control \"public, immutable\";"
+      echo "        try_files \$uri =404;"
       echo "    }"
     fi
     echo ""
-    echo "    location ~ \.php\$ {"
-    echo "        fastcgi_read_timeout 3000;"
-    echo "        fastcgi_pass unix:/run/php/php${php_version}-fpm.sock;"
-    echo "        include snippets/fastcgi-php.conf;"
-    echo "        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;"
-    echo "        include fastcgi_params;"
-    echo "    }"
-    echo ""
     echo "    location ~ /\.ht {"
     echo "        deny all;"
-    echo "    }"
-    echo ""
-    # Phục vụ file tĩnh trực tiếp bởi Nginx (CSS, JS, fonts, images) - tăng hiệu năng cho Laravel/WordPress
-    echo "    location ~* \.(?:css|js|jpe?g|png|gif|ico|svg|woff|woff2|ttf|eot|otf|webp|avif|mp4|webm)\$ {"
-    echo "        expires 30d;"
-    echo "        access_log off;"
-    echo "        add_header Cache-Control \"public, immutable\";"
-    echo "        try_files \$uri =404;"
     echo "    }"
     echo "}"
   } > "$nginx_conf"
@@ -225,3 +269,47 @@ if [ "$use_ssl" = true ]; then
 fi
 
 echo "Configuration for Nginx and/or Apache2 created and enabled."
+
+# Nếu dùng Octane, tạo PM2 ecosystem file để quản lý tiến trình Octane
+if [ "$octane" = true ]; then
+  # Xác định thư mục gốc của dự án (không bao gồm /public)
+  project_root="${root%/public}"
+
+  echo ""
+  echo "=== Thiết lập Laravel Octane với PM2 ==="
+
+  # Tạo PM2 ecosystem file
+  pm2_config="$project_root/ecosystem.config.js"
+  cat > "$pm2_config" << PMEOF
+module.exports = {
+  apps: [{
+    name: 'octane-${name}',
+    script: 'artisan',
+    args: 'octane:start --server=swoole --host=127.0.0.1 --port=${octane_port} --workers=auto --task-workers=auto --max-requests=500',
+    interpreter: 'php',
+    cwd: '${project_root}',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '512M',
+    env: {
+      APP_ENV: 'production',
+    },
+  }]
+};
+PMEOF
+  echo "PM2 ecosystem file đã được tạo tại $pm2_config"
+
+  echo ""
+  echo "=== Hướng dẫn thiết lập Octane ==="
+  echo "1. cd $project_root"
+  echo "2. composer require laravel/octane"
+  echo "3. php artisan octane:install --server=swoole"
+  echo "4. pm2 start ecosystem.config.js"
+  echo "5. pm2 save && pm2 startup     # Tự động khởi động khi server reboot"
+  echo ""
+  echo "Quản lý Octane:"
+  echo "  pm2 restart octane-${name}   # Restart sau khi deploy"
+  echo "  pm2 logs octane-${name}      # Xem log"
+  echo "  pm2 monit                    # Monitor tài nguyên"
+fi

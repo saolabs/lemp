@@ -1,103 +1,182 @@
 # LEMP Stack Toolkit
 
-Bộ công cụ tự động hóa cài đặt và cấu hình môi trường LEMP (Linux, Nginx, MySQL, PHP) cho máy chủ web. Các script này giúp cài đặt, cấu hình và quản lý các thành phần cần thiết cho việc triển khai ứng dụng web trên nền tảng Linux.
+Bộ công cụ Script Bash tối ưu, tự động hóa toàn diện quy trình cài đặt, cấu hình và quản trị môi trường **LEMP** (Linux, Nginx, MySQL, PHP-FPM) trên hệ điều hành **Ubuntu Server**. 
 
-## Giới thiệu
+Được thiết kế chuyên biệt để đáp ứng các tiêu chuẩn vận hành thực tế (Production-ready) cho các dự án **Laravel** (bao gồm cả Laravel Octane/Swoole), **WordPress**, và các ứng dụng PHP hiện đại khác.
 
-LEMP Stack Toolkit bao gồm một số script bash tự động hóa việc cài đặt và cấu hình các thành phần của stack LEMP:
+---
 
-- **Linux**: Nền tảng hệ điều hành
-- **Nginx**: Web server
-- **MySQL**: Hệ quản trị cơ sở dữ liệu
-- **PHP**: Ngôn ngữ lập trình phía máy chủ
+## 🚀 Điểm Nổi Bật & Tối Ưu Hóa Production
 
-## Danh sách các script
+Không chỉ đơn thuần là cài đặt các gói phần mềm, bộ công cụ tích hợp sẵn các cấu hình tối ưu hiệu năng cao nhất:
 
-### 1. lemp.sh
-Script chính để cài đặt đầy đủ stack LEMP (Linux, Nginx, MySQL, PHP), bao gồm:
-- Cài đặt Apache (chạy song song với Nginx trên cổng 8080)
-- Cài đặt Nginx làm reverse proxy
-- Cài đặt PHP và các module cần thiết
-- Cài đặt MySQL Server
-- Cài đặt các công cụ phụ trợ (composer, certbot, pm2, etc.)
+*   **Kiến trúc LEMP thuần (Pure LEMP):** Sử dụng Nginx làm Web Server kết hợp PHP-FPM qua Unix Socket. Loại bỏ hoàn toàn Apache mặc định để giảm hao phí tài nguyên tối đa (Apache chỉ còn là tùy chọn bổ sung).
+*   **Tối ưu hóa PHP OPcache:** Cấu hình sẵn dung lượng cache lớn (256MB), lưu trữ lên đến 10,000 files, tắt kiểm tra thay đổi file liên tục (`revalidate_freq=0`) trên production để tối ưu tốc độ phản hồi tối đa.
+*   **PHP-FPM Pool Tuning:** Chuyển cấu hình quản lý tiến trình sang chế độ `dynamic`, cho phép tăng tốc lên đến 50 worker khi chịu tải cao và tự động restart worker sau mỗi 500 request (`max_requests = 500`) nhằm triệt tiêu hoàn toàn hiện tượng rò rỉ bộ nhớ (memory leaks).
+*   **Bảo mật & Tối ưu Nginx:**
+    *   Tự động bật **Gzip Compression** (mức 6) cho toàn bộ các định dạng file tĩnh phổ biến.
+    *   Cấu hình sẵn các **Security Headers** chuẩn (`X-Frame-Options`, `X-Content-Type-Options`, `X-XSS-Protection`, `Referrer-Policy`).
+    *   Cấu hình **FastCGI Buffers** lớn (128k/256k) tránh lỗi phản hồi bị cắt khúc hoặc gián đoạn đối với Laravel/WordPress.
+    *   Cấu hình Cache tệp tĩnh tối ưu (`expires 30d`, `open_file_cache`).
+    *   Giới hạn dung lượng tải lên mặc định tăng lên **100MB** (`client_max_body_size`).
+*   **Hỗ trợ Laravel Octane:** Tích hợp sẵn proxy ngược (Reverse Proxy) hỗ trợ Swoole, truyền tải kết nối WebSocket và tự động sinh cấu hình PM2 quản lý tiến trình tự động.
+*   **Triển khai Git an toàn (Zero-Downtime-like Sync):** Quy trình triển khai code sử dụng cơ chế clone nguồn về thư mục nguồn riêng `/var/www/sources` rồi đồng bộ bằng `rsync` có bộ lọc loại trừ (`.git`, `.env`, log,...) sang thư mục chạy `/var/www/html` giúp tránh làm gián đoạn ứng dụng đang chạy.
 
-### 2. php-setup.sh
-Script để cài đặt hoặc cập nhật phiên bản PHP trên hệ thống:
-- Cài đặt phiên bản PHP mới
-- Cập nhật từ phiên bản cũ lên phiên bản mới
-- Cấu hình PHP tối ưu (memory_limit, upload_max_filesize, etc.)
-- Cập nhật cấu hình liên quan trong Apache và Nginx
+---
 
-### 3. php-fix.sh
-Script sửa lỗi và tái cấu hình PHP khi cần thiết:
-- Sửa các lỗi phổ biến trong cấu hình PHP
-- Cài đặt và cấu hình mod_rpaf cho Apache
-- Khởi động lại các dịch vụ
+## 🛠️ Yêu Cầu Hệ Thống
 
-### 4. phpsv-config.sh
-Script tạo cấu hình máy chủ ảo (Virtual Host) cho dự án web:
-- Tạo cấu hình cho Nginx
-- Tạo cấu hình cho Apache
-- Hỗ trợ cấu hình SSL với certbot
-- Tùy chỉnh đặc biệt cho dự án Laravel
+*   **Hệ điều hành:** Ubuntu Server (Đã kiểm thử tốt trên các phiên bản 20.04 LTS, 22.04 LTS, 24.04 LTS).
+*   **Kiến trúc CPU:** Hỗ trợ cả x86_64 và ARM64 (AWS Graviton, Oracle ARM).
+*   **Quyền hạn:** Cần chạy dưới quyền `root` hoặc thông qua lệnh `sudo`.
+*   **Kết nối Internet:** Yêu cầu đường truyền mạng ổn định để tải các gói phần mềm từ PPA Ondrej PHP và các repo chính thức.
 
-### 5. wp.sh
-Script tự động cài đặt WordPress:
-- Tải và cài đặt WordPress mới nhất
-- Tạo cơ sở dữ liệu và user MySQL
-- Thiết lập quyền cho thư mục WordPress
+> [!WARNING]  
+> Các script này được thiết kế và kiểm thử chỉ dành riêng cho hệ điều hành Ubuntu Linux. **KHÔNG** chạy trực tiếp các script này trên hệ điều hành macOS hoặc Windows nội bộ.
 
-### 6. gcp.sh
-Script quản lý triển khai dự án từ Git:
-- Clone repository từ Git về máy chủ
-- Thiết lập cấu trúc thư mục phù hợp
-- Tạo script tự động pull và cập nhật code
-- Hỗ trợ đặc biệt cho dự án Laravel
+---
 
-## Cách sử dụng
+## 📂 Chi Tiết Bộ Script
 
-### Cài đặt LEMP stack đầy đủ:
+Bộ toolkit bao gồm 6 script chuyên biệt, mỗi script đảm nhận một vai trò cụ thể trong vòng đời phát triển:
+
+### 1. [lemp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/lemp.sh) — Khởi Tạo Toàn Diện Hệ Thống
+Script này sẽ thiết lập nền tảng server ban đầu từ hệ điều hành sạch.
+*   **Cài đặt:** Nginx, MySQL Server, PHP 8.3, Composer (bản mới nhất), Node.js v20 LTS, PM2 và Certbot.
+*   **Các thành phần PHP Extension cài sẵn:** Hỗ trợ tối đa Laravel/WordPress/Octane (`fpm`, `cli`, `mysql`, `curl`, `gd`, `mbstring`, `xml`, `zip`, `bcmath`, `sqlite3`, `intl`, `opcache`, `tokenizer`, `ctype`, `fileinfo`, `imagick`, `exif`, `redis`, `swoole`).
+*   **Cách sử dụng:**
+    ```bash
+    chmod +x lemp.sh
+    sudo ./lemp.sh
+    ```
+
+### 2. [phpsv-config.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/phpsv-config.sh) — Cấu Hình VirtualHost (Tên Miền & SSL)
+Tự động tạo cấu hình Nginx/Apache cho tên miền dự án của bạn, hỗ trợ SSL Let's Encrypt tự động.
+*   **Cú pháp:**
+    ```bash
+    sudo ./phpsv-config.sh [options] -name <tên_dự_án> -domain <tên_miền> [-root <đường_dẫn>] [-port <cổng_octane>]
+    ```
+*   **Các tham số bổ sung:**
+    *   `--nginx`: Tạo cấu hình cho Nginx (Mặc định).
+    *   `--apache`: Chỉ tạo cấu hình cho Apache2 (Chạy trên cổng 8080 nếu cần sử dụng song song).
+    *   `--ssl`: Tự động đăng ký và cấu hình SSL HTTPS miễn phí qua Certbot.
+    *   `--laravel`: Tự động thêm hậu tố `/public` vào thư mục Root nếu chưa có.
+    *   `--octane`: Bật chế độ cấu hình ngược (Reverse Proxy) cho Laravel Octane (Swoole). Nginx sẽ tự động chuyển hướng các request động về cổng chỉ định và trực tiếp phục vụ các tệp tĩnh. Tự sinh file `ecosystem.config.js` cho PM2.
+    *   `-name` / `-n`: Tên định danh cấu hình (dùng đặt tên file cấu hình, tên folder dự án).
+    *   `-domain` / `-d`: Tên miền chính (có thể khai báo nhiều cờ `-d` để thiết lập Server Alias / Subdomain).
+    *   `-root` / `-r`: Đường dẫn tuyệt đối của thư mục chứa code (Mặc định: `/var/www/html/<tên_dự_án>`).
+    *   `-port` / `-p`: Cổng chạy Laravel Octane (Mặc định: 8000).
+*   **Ví dụ sử dụng:**
+    *   *Dự án PHP/WordPress thông thường với SSL:*
+        ```bash
+        sudo ./phpsv-config.sh --ssl -name myblog -domain myblog.com -domain www.myblog.com
+        ```
+    *   *Dự án Laravel truyền thống (chạy PHP-FPM):*
+        ```bash
+        sudo ./phpsv-config.sh --laravel --ssl -name myapp -domain myapp.com
+        ```
+    *   *Dự án Laravel Octane (Swoole) chạy trên cổng 8010:*
+        ```bash
+        sudo ./phpsv-config.sh --octane --ssl -name myoctane -domain octaneapp.com -port 8010
+        ```
+
+### 3. [php-setup.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/php-setup.sh) — Quản Lý & Nâng Cấp Phiên Bản PHP
+Cho phép cài đặt thêm phiên bản PHP mới (ví dụ 8.1, 8.2, 8.3, 8.4) chạy song song và cập nhật cấu hình hệ thống một cách an toàn.
+*   **Đo độ tin cậy cao:** Không xóa các phiên bản PHP cũ, tránh nguy cơ làm sập các trang web hiện có đang chạy phiên bản cũ hơn.
+*   **Tự động cập nhật:** Tự động sửa lại đường dẫn PHP-FPM Socket trong các cấu hình Nginx hiện có và cập nhật liên kết PHP CLI mặc định qua `update-alternatives`.
+*   **Cách sử dụng:**
+    ```bash
+    sudo ./php-setup.sh [phiên_bản]
+    # Ví dụ: cài đặt/chuyển đổi sang PHP 8.4
+    sudo ./php-setup.sh 8.4
+    ```
+
+### 4. [php-fix.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/php-fix.sh) — Khắc Phục Lỗi & Tái Cấu Hình Nhanh
+Công cụ chuẩn đoán và sửa các lỗi phát sinh thường gặp.
+*   **Các tác vụ sửa lỗi:** 
+    *   Kiểm tra và ghi đè các cấu hình `php.ini` bị sai lệch về mức tối ưu (memory_limit, upload limits, execution time).
+    *   Sửa lỗi phân quyền ghi Session trong thư mục `/var/lib/php/sessions` cho user `www-data`.
+    *   Kiểm tra tính hợp lệ của cú pháp cấu hình Nginx (`nginx -t`) trước khi khởi động lại để tránh làm sập Web Server.
+    *   Tự động phát hiện và khởi động lại chính xác dịch vụ PHP-FPM đang hoạt động.
+*   **Cách sử dụng:**
+    ```bash
+    sudo ./php-fix.sh
+    ```
+
+### 5. [wp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/wp.sh) — Cài Đặt WordPress Nhanh
+Khởi tạo mã nguồn và cơ sở dữ liệu WordPress trong vài giây.
+*   **Tính năng:** Tải phiên bản WordPress mới nhất, tạo Database MySQL + User MySQL + Cấp quyền tương ứng, thiết lập phân quyền thư mục `www-data:www-data` chuẩn xác.
+*   **Cách sử dụng:**
+    ```bash
+    sudo ./wp.sh --name myblog --domain myblog.com
+    ```
+
+### 6. [gcp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/gcp.sh) — Tự Động Hóa Triển Khai Từ Git (Deploy Script Generator)
+Hỗ trợ clone code từ Git và sinh ra script cập nhật tự động cho dự án.
+*   **Cơ chế:** 
+    1. Clone/Pull mã nguồn từ Git về `/var/www/sources/<tên_thư_mục>`.
+    2. Sử dụng `rsync` để đồng bộ sạch sang `/var/www/html/<tên_thư_mục>`, loại trừ các tệp tin cấu hình môi trường `.env` và thư mục `.git`.
+    3. Tự động sinh một deploy script tại `/var/www/shell/<tên_thư_mục>.sh` phục vụ cho việc cập nhật code sau này (tiện lợi cho việc cài đặt Webhook hoặc chạy qua cronjob).
+*   **Hỗ trợ Laravel chuyên sâu:** Nếu truyền cờ `--laravel`, script sẽ thực hiện:
+    *   Tạo file `.env` từ file ví dụ nếu chưa có.
+    *   Chạy `composer install --no-dev --optimize-autoloader`.
+    *   Tự động sinh ứng dụng `APP_KEY` nếu trống.
+    *   Thiết lập phân quyền chuẩn cho thư mục `storage` và `bootstrap/cache`.
+    *   *Trong Deploy script sinh ra:* Tự động chạy chuỗi lệnh tối ưu hóa Laravel (`config:cache`, `route:cache`, `view:cache`) và tự động khởi động lại Laravel Octane qua PM2 nếu phát hiện file `ecosystem.config.js`.
+*   **Cách sử dụng:**
+    ```bash
+    sudo ./gcp.sh <Git_URL> [tên_thư_mục] [--laravel]
+    # Ví dụ với Laravel:
+    sudo ./gcp.sh https://github.com/example/my-laravel-project.git myapp --laravel
+    ```
+    *Để cập nhật code sau này, bạn chỉ cần chạy file script đã được sinh ra:*
+    ```bash
+    sudo /var/www/shell/myapp.sh
+    ```
+
+---
+
+## 📋 Quy Trình Triển Khai Thực Tế Khuyên Dùng
+
+Để dựng một hệ thống hoàn chỉnh chạy ứng dụng Laravel/WordPress trên máy chủ mới, hãy làm theo các bước sau:
+
+### Bước 1: Khởi tạo Server
 ```bash
-chmod +x lemp.sh
+git clone <URL_repo_LEMP_Toolkit> lemp-toolkit
+cd lemp-toolkit
+chmod +x *.sh
 sudo ./lemp.sh
 ```
 
-### Cài đặt hoặc cập nhật PHP:
+### Bước 2: Triển khai mã nguồn từ Git
 ```bash
-chmod +x php-setup.sh
-sudo ./php-setup.sh [phiên_bản]
-```
-Ví dụ: `sudo ./php-setup.sh 8.3`
-
-### Tạo cấu hình máy chủ ảo:
-```bash
-chmod +x phpsv-config.sh
-sudo ./phpsv-config.sh --nginx --ssl -name myproject -domain example.com -root /var/www/html/myproject
+sudo ./gcp.sh https://github.com/user/laravel-app.git myapp --laravel
 ```
 
-### Cài đặt WordPress:
+### Bước 3: Cấu hình Virtual Host & SSL
+*   **Đối với Laravel truyền thống (PHP-FPM):**
+    ```bash
+    sudo ./phpsv-config.sh --laravel --ssl -name myapp -domain mydomain.com
+    ```
+*   **Đối với Laravel Octane (Swoole):**
+    1. Thiết lập VirtualHost với Octane:
+       ```bash
+       sudo ./phpsv-config.sh --octane --ssl -name myapp -domain mydomain.com -port 8000
+       ```
+    2. File cấu hình PM2 `ecosystem.config.js` đã tự động sinh ra trong `/var/www/html/myapp`. Bạn hãy khởi động Octane bằng cách:
+       ```bash
+       cd /var/www/html/myapp
+       pm2 start ecosystem.config.js
+       ```
+
+### Bước 4: Kiểm tra và vận hành
+Nếu gặp bất kỳ vấn đề gì về phân quyền hoặc cấu hình PHP trong quá trình chạy, hãy sử dụng:
 ```bash
-chmod +x wp.sh
-sudo ./wp.sh --name mysite --domain example.com
+sudo ./php-fix.sh
 ```
 
-### Triển khai dự án từ Git:
-```bash
-chmod +x gcp.sh
-sudo ./gcp.sh https://github.com/username/repo.git [folder_name] [--laravel]
-```
+---
 
-## Yêu cầu hệ thống
+## 🔒 Bản Quyền & Giấy Phép
 
-- Hệ điều hành Linux (đã thử nghiệm trên Ubuntu)
-- Quyền root hoặc sudo
-- Kết nối internet để tải các gói
-
-## Các tính năng chính
-
-- Cài đặt tự động LEMP stack đầy đủ
-- Cấu hình tối ưu cho PHP, Nginx và Apache
-- Hỗ trợ SSL/HTTPS thông qua certbot
-- Triển khai tự động dự án từ Git
-- Hỗ trợ đặc biệt cho dự án Laravel
-- Quản lý phiên bản PHP
+Mã nguồn mở và phát triển tự do. Bạn có thể tùy biến cấu hình theo nhu cầu của doanh nghiệp hoặc cá nhân.
