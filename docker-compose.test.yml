@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  lemp-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    # privileged là cần thiết để systemd hoạt động bình thường bên trong container
+    privileged: true
+    # Mount volume cgroup để systemd có thể quản lý các service (như nginx, apache2, mysql)
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      # Mount toàn bộ mã nguồn của bạn vào thư mục /workspace để tiện chạy file script
+      - ./:/workspace
+    working_dir: /workspace
+    # Mở sẵn các port thông dụng của Web Server để bạn test bằng trình duyệt nếu muốn
+    ports:
+      - "8080:80"     # Map port 80 của container ra port 8080 của máy chính
+      - "8081:8080"   # Dùng để test Apache2 lắng nghe trên port 8080 (ra 8081 trên máy chính)
+      - "8443:443"    # HTTPS
