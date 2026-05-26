@@ -195,6 +195,15 @@ if [ -f "$WP_CONFIG_FILE" ]; then
     sudo sed -i "s|database_name_here|$wp_db|g" "$WP_CONFIG_FILE"
     sudo sed -i "s|username_here|$wp_user|g" "$WP_CONFIG_FILE"
     sudo sed -i "s|password_here|$wp_password|g" "$WP_CONFIG_FILE"
+
+    echo "Đang tải các khóa bảo mật (salts) từ api.wordpress.org..."
+    SALTS=$(curl -s --max-time 10 https://api.wordpress.org/secret-key/1.1/salt/)
+    if [ -n "$SALTS" ] && echo "$SALTS" | grep -q "AUTH_KEY"; then
+        echo "Cập nhật các khóa bảo mật vào wp-config.php..."
+        sudo SALTS_CONTENT="$SALTS" perl -i -0777 -pe 's/define\(\s*'\''AUTH_KEY'\''.*?define\(\s*'\''NONCE_SALT'\''.*?\);/$ENV{SALTS_CONTENT}/s' "$WP_CONFIG_FILE"
+    else
+        echo "Cảnh báo: Không thể tải các khóa bảo mật từ WordPress.org. Giữ nguyên các khóa mặc định."
+    fi
 fi
 
 # Thiết lập quyền sở hữu và phân quyền cho web server (www-data)
