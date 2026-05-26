@@ -81,6 +81,8 @@ fi
 
 # Bước 3: Bật Gzip compression + Security Headers trong Nginx
 echo "Tối ưu cấu hình Nginx toàn cục (Gzip + Security Headers)..."
+sudo sed -i 's/^\s*gzip/# &/' /etc/nginx/nginx.conf
+sudo sed -i 's/^\s*client_max_body_size/# &/' /etc/nginx/nginx.conf
 sudo bash -c 'cat > /etc/nginx/conf.d/optimization.conf << OPTEOF
 # === GZIP COMPRESSION ===
 gzip on;
