@@ -66,6 +66,9 @@ fi
 
 # Bước 4: Thêm cấu hình tối ưu Nginx (Không ghi đè Nginx site default cũ)
 echo "Tối ưu cấu hình Nginx toàn cục (Gzip + Security Headers)..."
+# Tránh lỗi duplicate directive gzip
+sudo sed -i 's/^\s*gzip on;/# gzip on;/' /etc/nginx/nginx.conf
+
 sudo bash -c 'cat > /etc/nginx/conf.d/optimization.conf << OPTEOF
 # === GZIP COMPRESSION ===
 gzip on;
