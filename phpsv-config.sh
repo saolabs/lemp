@@ -139,20 +139,6 @@ if [ "$create_nginx" = true ]; then
       echo "    }"
     else
       # === Cấu hình PHP-FPM truyền thống ===
-      echo "    location ~* ^/(static/).+\.(?:css|cur|js|jpe?g|gif|htc|ico|png|html|xml|otf|ttf|eot|woff|woff2|svg)\$ {"
-      echo "        try_files \$uri \$uri/ /index.php;"
-      echo "        client_max_body_size 100M;"
-      echo "        access_log off;"
-      echo "        expires 30d;"
-      echo "        add_header Cache-Control public;"
-      echo "        tcp_nodelay off;"
-      echo "        open_file_cache max=3000 inactive=120s;"
-      echo "        open_file_cache_valid 45s;"
-      echo "        open_file_cache_min_uses 2;"
-      echo "        open_file_cache_errors off;"
-      echo "    }"
-      echo ""
-
       # Cấu hình route chính
       if [ "$create_apache" = true ]; then
         echo "    location / {"
