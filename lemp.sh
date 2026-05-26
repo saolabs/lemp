@@ -8,6 +8,7 @@ fi
 
 # Bước 1: Cập nhật hệ thống và cài đặt các gói cần thiết
 echo "Cập nhật hệ thống và cài đặt các gói cần thiết..."
+sudo rm -f /etc/apt/sources.list.d/nodesource.list
 sudo apt update
 sudo apt install -y software-properties-common curl git unzip zip supervisor mysql-server nginx build-essential net-tools rsync
 

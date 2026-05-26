@@ -11,6 +11,9 @@ echo "Lưu ý: Nginx, Apache2, MySQL sẽ KHÔNG bị gỡ cài đặt để đ�
 sleep 2
 
 # Bước 1: Cập nhật danh sách gói và thêm repo Ondrej PHP
+echo "Dọn dẹp các repository cũ (như NodeSource cũ) để tránh lỗi apt update..."
+sudo rm -f /etc/apt/sources.list.d/nodesource.list
+
 echo "Thêm repository Ondrej PHP để cập nhật PHP..."
 sudo apt update
 sudo apt install -y software-properties-common curl git unzip zip
