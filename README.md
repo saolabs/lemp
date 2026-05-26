@@ -105,11 +105,20 @@ Công cụ chuẩn đoán và sửa các lỗi phát sinh thường gặp.
 
 ### 5. [wp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/wp.sh) — Cài Đặt WordPress Nhanh
 Khởi tạo mã nguồn và cơ sở dữ liệu WordPress trong vài giây.
-*   **Tính năng:** Tải phiên bản WordPress mới nhất, tạo Database MySQL + User MySQL + Cấp quyền tương ứng, thiết lập phân quyền thư mục `www-data:www-data` chuẩn xác.
+*   **Tính năng:** 
+    *   Tự động tải phiên bản WordPress mới nhất, kiểm tra lỗi tải xuống và tự động dọn dẹp file nén tạm thời `latest.tar.gz` sau khi giải nén.
+    *   Tạo Database MySQL + User MySQL + Cấp quyền tương ứng một cách an toàn.
+    *   Thiết lập phân quyền thư mục `www-data:www-data` chuẩn xác.
+    *   Hỗ trợ chạy hoàn toàn tự động (non-interactive) bằng cách truyền các cờ database qua dòng lệnh.
 *   **Cách sử dụng:**
-    ```bash
-    sudo ./wp.sh --name myblog --domain myblog.com
-    ```
+    *   *Chế độ tương tác (hỏi khi chạy):*
+        ```bash
+        sudo ./wp.sh --name myblog --domain myblog.com
+        ```
+    *   *Chế độ tự động (truyền sẵn thông số database):*
+        ```bash
+        sudo ./wp.sh --name myblog --domain myblog.com --db-name wp_db --db-user wp_user --db-pass wp_password
+        ```
 
 ### 6. [gcp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/gcp.sh) — Tự Động Hóa Triển Khai Từ Git (Deploy Script Generator)
 Hỗ trợ clone code từ Git và sinh ra script cập nhật tự động cho dự án.

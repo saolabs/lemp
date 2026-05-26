@@ -51,7 +51,7 @@ install_php() {
   echo "Cài đặt PHP $PHP_VERSION và các module cần thiết..."
   sudo add-apt-repository ppa:ondrej/php -y
   sudo apt update
-  sudo apt install -y php$PHP_VERSION php$PHP_VERSION-fpm php$PHP_VERSION-cli php$PHP_VERSION-mysql php$PHP_VERSION-curl php$PHP_VERSION-gd php$PHP_VERSION-mbstring php$PHP_VERSION-xml php$PHP_VERSION-zip php$PHP_VERSION-bcmath php$PHP_VERSION-sqlite3 php$PHP_VERSION-intl php$PHP_VERSION-opcache php$PHP_VERSION-tokenizer php$PHP_VERSION-ctype php$PHP_VERSION-fileinfo php$PHP_VERSION-imagick php$PHP_VERSION-exif php$PHP_VERSION-redis
+  sudo apt install -y php$PHP_VERSION php$PHP_VERSION-fpm php$PHP_VERSION-cli php$PHP_VERSION-mysql php$PHP_VERSION-curl php$PHP_VERSION-gd php$PHP_VERSION-mbstring php$PHP_VERSION-xml php$PHP_VERSION-zip php$PHP_VERSION-bcmath php$PHP_VERSION-sqlite3 php$PHP_VERSION-intl php$PHP_VERSION-opcache php$PHP_VERSION-tokenizer php$PHP_VERSION-ctype php$PHP_VERSION-fileinfo php$PHP_VERSION-imagick php$PHP_VERSION-exif php$PHP_VERSION-redis php$PHP_VERSION-swoole
 }
 
 # Sửa đổi các file cấu hình
@@ -74,6 +74,46 @@ update_config_files() {
           echo "Sửa đổi cấu hình php.ini ($INI_FILE) cho PHP phiên bản $PHP_VERSION"
       fi
   done
+
+  # Tối ưu OPcache cho production (giống lemp.sh)
+  echo "Tối ưu cấu hình OPcache cho PHP $PHP_VERSION..."
+  OPCACHE_INI="/etc/php/$PHP_VERSION/fpm/conf.d/10-opcache.ini"
+  if [ -f "$OPCACHE_INI" ]; then
+      sudo bash -c "cat > $OPCACHE_INI << 'OPCACHE_EOF'
+[opcache]
+opcache.enable=1
+opcache.memory_consumption=256
+opcache.interned_strings_buffer=16
+opcache.max_accelerated_files=10000
+opcache.revalidate_freq=0
+opcache.validate_timestamps=1
+opcache.save_comments=1
+opcache.fast_shutdown=1
+OPCACHE_EOF"
+      echo "Đã tối ưu OPcache: 256MB bộ nhớ, 10000 file cache."
+  fi
+
+  # Tối ưu PHP-FPM pool cho production (giống lemp.sh)
+  echo "Tối ưu PHP-FPM pool..."
+  FPM_POOL="/etc/php/$PHP_VERSION/fpm/pool.d/www.conf"
+  if [ -f "$FPM_POOL" ]; then
+      sudo sed -i 's/^pm = .*/pm = dynamic/' "$FPM_POOL"
+      sudo sed -i 's/^pm.max_children = .*/pm.max_children = 50/' "$FPM_POOL"
+      sudo sed -i 's/^pm.start_servers = .*/pm.start_servers = 5/' "$FPM_POOL"
+      sudo sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 5/' "$FPM_POOL"
+      sudo sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 35/' "$FPM_POOL"
+      sudo sed -i 's/^;pm.max_requests = .*/pm.max_requests = 500/' "$FPM_POOL"
+      echo "Đã tối ưu PHP-FPM pool: dynamic, max 50 workers."
+  fi
+
+  # Đảm bảo phân quyền session directory
+  echo "Kiểm tra quyền ghi session của PHP..."
+  SESSION_DIR="/var/lib/php/sessions"
+  if [ -d "$SESSION_DIR" ]; then
+      sudo chown -R www-data:www-data "$SESSION_DIR"
+      sudo chmod -R 733 "$SESSION_DIR"
+      echo "Đã phân quyền thư mục session tại $SESSION_DIR"
+  fi
 
   # Khởi động dịch vụ PHP-FPM mới
   sudo systemctl start php$PHP_VERSION-fpm

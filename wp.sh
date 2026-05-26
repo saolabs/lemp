@@ -1,13 +1,22 @@
 #!/bin/bash
 
+# Kiểm tra quyền root
+if [ "$EUID" -ne 0 ]; then
+  echo "Vui lòng chạy script này với quyền root hoặc sử dụng sudo."
+  exit 1
+fi
+
 # Hàm hiển thị hướng dẫn sử dụng
 function show_help {
     echo "Usage:"
-    echo "  ./install_wp.sh --name <folder_name> --domain <domain_name>"
-    echo "  ./install_wp.sh <folder_name> <domain_name>"
+    echo "  $0 --name <folder_name> --domain <domain_name> [options]"
+    echo "  $0 <folder_name> <domain_name> [options]"
     echo "Options:"
-    echo "  -n | --name    Tên thư mục chứa WordPress (Document Root)"
-    echo "  -d | --domain  Tên miền (domain) của website"
+    echo "  -n | --name        Tên thư mục chứa WordPress (Document Root)"
+    echo "  -d | --domain      Tên miền (domain) của website"
+    echo "  --db-name          Tên cơ sở dữ liệu (tùy chọn)"
+    echo "  --db-user          Tên người dùng cơ sở dữ liệu (tùy chọn)"
+    echo "  --db-pass          Mật khẩu cơ sở dữ liệu (tùy chọn)"
     exit 1
 }
 
@@ -16,15 +25,21 @@ if [ "$#" -lt 2 ]; then
     show_help
 fi
 
-# Mặc định không có giá trị cho name và domain
+# Mặc định không có giá trị
 wp_folder=""
 domain_name=""
+wp_db=""
+wp_user=""
+wp_password=""
 
 # Kiểm tra nếu tham số được truyền theo cờ
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -n|--name) wp_folder="$2"; shift ;;
         -d|--domain) domain_name="$2"; shift ;;
+        --db-name|--dbname) wp_db="$2"; shift ;;
+        --db-user|--dbuser) wp_user="$2"; shift ;;
+        --db-pass|--dbpass) wp_password="$2"; shift ;;
         *) 
             # Nếu tham số không dùng cờ, kiểm tra nếu đã có đủ 2 giá trị
             if [ -z "$wp_folder" ]; then
@@ -46,32 +61,75 @@ if [[ -z "$wp_folder" || -z "$domain_name" ]]; then
     show_help
 fi
 
-# Tạo cơ sở dữ liệu cho WordPress
-echo "Nhập tên database cho WordPress:"
-read wp_db
-echo "Nhập tên user cho database:"
-read wp_user
-echo "Nhập mật khẩu cho user:"
-read wp_password
+# Kiểm tra xem thư mục đã tồn tại chưa để tránh ghi đè/lỗi di chuyển
+if [ -d "/var/www/html/$wp_folder" ]; then
+    echo "Lỗi: Thư mục /var/www/html/$wp_folder đã tồn tại trên hệ thống!"
+    exit 1
+fi
 
+# Tạo cơ sở dữ liệu cho WordPress
+if [ -z "$wp_db" ]; then
+    echo "Nhập tên database cho WordPress:"
+    read -r wp_db
+fi
+if [ -z "$wp_user" ]; then
+    echo "Nhập tên user cho database:"
+    read -r wp_user
+fi
+if [ -z "$wp_password" ]; then
+    echo "Nhập mật khẩu cho user:"
+    read -r wp_password
+fi
+
+echo "Đang khởi tạo database và user MySQL..."
 sudo mysql -u root <<MYSQL_SCRIPT
-CREATE DATABASE ${wp_db};
-CREATE USER '${wp_user}'@'localhost' IDENTIFIED BY '${wp_password}';
-GRANT ALL PRIVILEGES ON ${wp_db}.* TO '${wp_user}'@'localhost';
+CREATE DATABASE IF NOT EXISTS \`${wp_db}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${wp_user}'@'localhost' IDENTIFIED BY '${wp_password}';
+GRANT ALL PRIVILEGES ON \`${wp_db}\`.* TO '${wp_user}'@'localhost';
 FLUSH PRIVILEGES;
 MYSQL_SCRIPT
 
-echo "Database đã được tạo."
+if [ $? -eq 0 ]; then
+    echo "Database và user đã được tạo thành công."
+else
+    echo "Lỗi khi tạo database. Vui lòng kiểm tra quyền truy cập MySQL."
+    exit 1
+fi
 
 # Tải xuống và cài đặt WordPress
-cd /var/www/html/
-sudo curl -O https://wordpress.org/latest.tar.gz
-sudo tar -zxvf latest.tar.gz
+cd /var/www/html/ || exit 1
+
+echo "Đang tải xuống phiên bản WordPress mới nhất..."
+if ! sudo curl -L -O https://wordpress.org/latest.tar.gz; then
+    echo "Lỗi: Tải xuống gói cài đặt WordPress thất bại."
+    exit 1
+fi
+
+echo "Đang giải nén..."
+if ! sudo tar -zxvf latest.tar.gz; then
+    echo "Lỗi: Giải nén gói cài đặt WordPress thất bại."
+    sudo rm -f latest.tar.gz
+    exit 1
+fi
+
+# Dọn dẹp tệp tin tải về ngay sau khi giải nén thành công
+sudo rm -f latest.tar.gz
+
+echo "Cấu hình thư mục cài đặt..."
 sudo mv wordpress "$wp_folder"
 
-# Thiết lập quyền cho WordPress
+# Thiết lập quyền sở hữu và phân quyền cho web server (www-data)
 sudo chown -R www-data:www-data /var/www/html/"$wp_folder"
 sudo chmod -R 755 /var/www/html/"$wp_folder"
 
 # Hướng dẫn tiếp theo
-echo "Cài đặt hoàn tất. Hãy cấu hình Nginx hoặc Apache theo yêu cầu của bạn để hoàn tất quá trình cài đặt WordPress."
+echo ""
+echo "=== Cài đặt WordPress thành công! ==="
+echo "1. Thư mục mã nguồn: /var/www/html/$wp_folder"
+echo "2. Thông tin database:"
+echo "   - Database Name: $wp_db"
+echo "   - Database User: $wp_user"
+echo ""
+echo "3. Bước tiếp theo, hãy chạy lệnh sau để tự động tạo cấu hình VirtualHost Nginx & SSL:"
+echo "   sudo ./phpsv-config.sh --ssl -name $wp_folder -domain $domain_name"
+echo "====================================="
