@@ -38,9 +38,9 @@ Không chỉ đơn thuần là cài đặt các gói phần mềm, bộ công c�
 
 ## 📂 Chi Tiết Bộ Script
 
-Bộ toolkit bao gồm 6 script chuyên biệt, mỗi script đảm nhận một vai trò cụ thể trong vòng đời phát triển:
+Bộ toolkit bao gồm 7 script chuyên biệt, mỗi script đảm nhận một vai trò cụ thể trong vòng đời phát triển:
 
-### 1. [lemp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/lemp.sh) — Khởi Tạo Toàn Diện Hệ Thống
+### 1. [lemp.sh](./lemp.sh) — Khởi Tạo Toàn Diện Hệ Thống
 Script này sẽ thiết lập nền tảng server ban đầu từ hệ điều hành sạch.
 *   **Cài đặt:** Nginx, MySQL Server, PHP 8.3, Composer (bản mới nhất), Node.js v20 LTS, PM2 và Certbot.
 *   **Các thành phần PHP Extension cài sẵn:** Hỗ trợ tối đa Laravel/WordPress/Octane (`fpm`, `cli`, `mysql`, `curl`, `gd`, `mbstring`, `xml`, `zip`, `bcmath`, `sqlite3`, `intl`, `opcache`, `tokenizer`, `ctype`, `fileinfo`, `imagick`, `exif`, `redis`, `swoole`).
@@ -50,7 +50,46 @@ Script này sẽ thiết lập nền tảng server ban đầu từ hệ điều 
     sudo ./lemp.sh
     ```
 
-### 2. [phpsv-config.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/phpsv-config.sh) — Cấu Hình VirtualHost (Tên Miền & SSL)
+### 2. [lemp-migrate.sh](./lemp-migrate.sh) — Nâng Cấp & Di Trú Hệ Thống An Toàn
+Dành cho máy chủ cũ đang sử dụng file `lemp.sh` bản cũ trong thư mục `vendor` (chạy song song Nginx làm proxy ngược sang Apache2 cổng 8080).
+*   **Tính năng nổi bật:**
+    *   **Nâng cấp an toàn:** Cài đặt PHP 8.3 cùng các extension mới nhất, tối ưu cấu hình OPcache và PHP-FPM pool tương tự bản mới mà **không** gỡ bỏ hay làm ảnh hưởng tới các dịch vụ quan trọng (Nginx, Apache2, MySQL) và dữ liệu các website cũ.
+    *   **Tối ưu hóa toàn cục Nginx:** Thêm cấu hình tối ưu hiệu năng và bảo mật (`conf.d/optimization.conf`), tự động xử lý/vô hiệu hóa directive `gzip on;` trùng lặp trong file `/etc/nginx/nginx.conf` gốc.
+    *   **Cập nhật môi trường:** Cài đặt Node.js v20 LTS, PM2 toàn cục, loại bỏ Certbot cài qua snap để chuyển sang bản Certbot apt tối ưu và ổn định hơn.
+*   **Cách sử dụng:**
+    ```bash
+    chmod +x lemp-migrate.sh
+    sudo ./lemp-migrate.sh
+    ```
+*   **Hướng dẫn chuyển đổi cấu hình Nginx site cũ sang Pure Nginx (PHP-FPM) để tối ưu hiệu năng:**
+    1. Mở file cấu hình Nginx của site cũ cần chuyển đổi (ví dụ: `/etc/nginx/sites-available/ten-site`).
+    2. Tìm đoạn cấu hình proxy cũ chuyển tiếp yêu cầu sang Apache2:
+        ```nginx
+        location / {
+            proxy_pass http://127.0.0.1:8080;
+            ...
+        }
+        ```
+    3. Xóa đoạn proxy trên và thay bằng cấu hình PHP-FPM mới (chạy trực tiếp trên socket của PHP 8.3):
+        ```nginx
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+            fastcgi_read_timeout 3000;
+            fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+            include snippets/fastcgi-php.conf;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+        }
+        ```
+    4. Kiểm tra cú pháp cấu hình và tải lại Nginx:
+        ```bash
+        sudo nginx -t && sudo systemctl reload nginx
+        ```
+
+### 3. [phpsv-config.sh](./phpsv-config.sh) — Cấu Hình VirtualHost (Tên Miền & SSL)
 Tự động tạo cấu hình Nginx/Apache cho tên miền dự án của bạn, hỗ trợ SSL Let's Encrypt tự động.
 *   **Cú pháp:**
     ```bash
@@ -80,7 +119,7 @@ Tự động tạo cấu hình Nginx/Apache cho tên miền dự án của bạn
         sudo ./phpsv-config.sh --octane --ssl -name myoctane -domain octaneapp.com -port 8010
         ```
 
-### 3. [php-setup.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/php-setup.sh) — Quản Lý & Nâng Cấp Phiên Bản PHP
+### 4. [php-setup.sh](./php-setup.sh) — Quản Lý & Nâng Cấp Phiên Bản PHP
 Cho phép cài đặt thêm phiên bản PHP mới (ví dụ 8.1, 8.2, 8.3, 8.4) chạy song song và cập nhật cấu hình hệ thống một cách an toàn.
 *   **Đo độ tin cậy cao:** Không xóa các phiên bản PHP cũ, tránh nguy cơ làm sập các trang web hiện có đang chạy phiên bản cũ hơn.
 *   **Tự động cập nhật:** Tự động sửa lại đường dẫn PHP-FPM Socket trong các cấu hình Nginx hiện có và cập nhật liên kết PHP CLI mặc định qua `update-alternatives`.
@@ -91,7 +130,7 @@ Cho phép cài đặt thêm phiên bản PHP mới (ví dụ 8.1, 8.2, 8.3, 8.4)
     sudo ./php-setup.sh 8.4
     ```
 
-### 4. [php-fix.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/php-fix.sh) — Khắc Phục Lỗi & Tái Cấu Hình Nhanh
+### 5. [php-fix.sh](./php-fix.sh) — Khắc Phục Lỗi & Tái Cấu Hình Nhanh
 Công cụ chuẩn đoán và sửa các lỗi phát sinh thường gặp.
 *   **Các tác vụ sửa lỗi:** 
     *   Kiểm tra và ghi đè các cấu hình `php.ini` bị sai lệch về mức tối ưu (memory_limit, upload limits, execution time).
@@ -103,7 +142,7 @@ Công cụ chuẩn đoán và sửa các lỗi phát sinh thường gặp.
     sudo ./php-fix.sh
     ```
 
-### 5. [wp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/wp.sh) — Cài Đặt WordPress Nhanh
+### 6. [wp.sh](./wp.sh) — Cài Đặt WordPress Nhanh
 Khởi tạo mã nguồn và cơ sở dữ liệu WordPress trong vài giây.
 *   **Tính năng:** 
     *   Tự động tải phiên bản WordPress mới nhất, kiểm tra lỗi tải xuống và tự động dọn dẹp file nén tạm thời `latest.tar.gz` sau khi giải nén.
@@ -120,7 +159,7 @@ Khởi tạo mã nguồn và cơ sở dữ liệu WordPress trong vài giây.
         sudo ./wp.sh --name myblog --domain myblog.com --db-name wp_db --db-user wp_user --db-pass wp_password
         ```
 
-### 6. [gcp.sh](file:///Users/doanln/Desktop/2026/Projects/saolabs/lemp/gcp.sh) — Tự Động Hóa Triển Khai Từ Git (Deploy Script Generator)
+### 7. [gcp.sh](./gcp.sh) — Tự Động Hóa Triển Khai Từ Git (Deploy Script Generator)
 Hỗ trợ clone code từ Git và sinh ra script cập nhật tự động cho dự án.
 *   **Cơ chế:** 
     1. Clone/Pull mã nguồn từ Git về `/var/www/sources/<tên_thư_mục>`.
